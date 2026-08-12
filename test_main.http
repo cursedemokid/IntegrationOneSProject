@@ -1,0 +1,21 @@
+# Health check
+GET http://127.0.0.1:8000/health
+Accept: application/json
+
+###
+
+# Web form
+GET http://127.0.0.1:8000/
+Accept: text/html
+
+###
+
+# Reconciliation request.
+# Requires configured .env values for ONEC_TRADE_URL and ONEC_TAX_BASES_JSON.
+POST http://127.0.0.1:8000/reconcile
+Content-Type: application/json
+
+{
+  "start_date": "2024-01-01",
+  "end_date": "2024-01-31"
+}

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Сверка остатков 1С</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f4f6f8;
+            color: #1f2937;
+        }
+        main {
+            max-width: 680px;
+            margin: 48px auto;
+            padding: 32px;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+        }
+        h1 {
+            margin-top: 0;
+            font-size: 28px;
+        }
+        form {
+            display: grid;
+            gap: 16px;
+        }
+        label {
+            display: grid;
+            gap: 6px;
+            font-weight: 600;
+        }
+        select, input, button {
+            font: inherit;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid #cbd5e1;
+        }
+        button {
+            border: 0;
+            background: #2563eb;
+            color: #ffffff;
+            cursor: pointer;
+            font-weight: 700;
+        }
+        button:disabled {
+            background: #94a3b8;
+            cursor: wait;
+        }
+        #status {
+            min-height: 24px;
+            margin-top: 16px;
+        }
+        .error {
+            color: #b91c1c;
+        }
+        .success {
+            color: #047857;
+        }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Сверка остатков 1С</h1>
+    <p>Укажите начальную и конечную дату периода включительно. Сервис получит актуальные данные из 1С и сформирует Excel-отчёт.</p>
+
+    <form id="reconcile-form">
+        <label>
+            Начальная дата
+            <input id="start-date" name="start_date" type="date" required>
+        </label>
+        <label>
+            Конечная дата
+            <input id="end-date" name="end_date" type="date" required>
+        </label>
+        <button id="submit" type="submit">Выполнить сверку</button>
+    </form>
+
+    <div id="status" role="status"></div>
+</main>
+
+<script>
+    const form = document.getElementById("reconcile-form");
+    const statusNode = document.getElementById("status");
+    const submitButton = document.getElementById("submit");
+    const startDateInput = document.getElementById("start-date");
+    const endDateInput = document.getElementById("end-date");
+    const today = new Date();
+    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    startDateInput.value = formatDate(firstDayOfMonth);
+    endDateInput.value = formatDate(today);
+
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        statusNode.className = "";
+        statusNode.textContent = "Выполняется сверка...";
+        submitButton.disabled = true;
+
+        try {
+            if (window.location.protocol === "file:") {
+                throw new Error("Откройте форму через сервер: http://127.0.0.1:8000/, а не как локальный HTML-файл.");
+            }
+
+            if (!startDateInput.value || !endDateInput.value) {
+                throw new Error("Укажите начальную и конечную дату.");
+            }
+            if (endDateInput.value < startDateInput.value) {
+                throw new Error("Конечная дата должна быть больше или равна начальной дате.");
+            }
+
+            const response = await fetch("/reconcile", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({
+                    start_date: startDateInput.value,
+                    end_date: endDateInput.value
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(await readErrorMessage(response));
+            }
+
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `reconciliation_${startDateInput.value}_${endDateInput.value}.xlsx`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+
+            statusNode.className = "success";
+            statusNode.textContent = "Отчёт сформирован и загружен.";
+        } catch (error) {
+            statusNode.className = "error";
+            statusNode.textContent = error.message;
+        } finally {
+            submitButton.disabled = false;
+        }
+    });
+
+    async function readErrorMessage(response) {
+        const contentType = response.headers.get("content-type") || "";
+
+        if (contentType.includes("application/json")) {
+            try {
+                const error = await response.json();
+                return error.detail || error.message || `Ошибка выполнения сверки: HTTP ${response.status}`;
+            } catch {
+                return `Ошибка выполнения сверки: HTTP ${response.status}. Сервер вернул некорректный JSON.`;
+            }
+        }
+
+        const text = await response.text();
+        const looksLikeHtml = text.trim().toLowerCase().startsWith("<!doctype")
+            || text.trim().toLowerCase().startsWith("<html");
+
+        if (looksLikeHtml) {
+            return `Сервер вернул HTML вместо JSON/Excel: HTTP ${response.status}. Проверьте, что приложение запущено через uvicorn и форма открыта по адресу http://127.0.0.1:8000/.`;
+        }
+
+        return text.trim() || `Ошибка выполнения сверки: HTTP ${response.status}`;
+    }
+
+    function formatDate(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, "0");
+        const day = String(date.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+    }
+</script>
+</body>
+</html>
