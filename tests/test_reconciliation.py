@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 from app.config import OneCBaseConfig
 from app.models import LedgerRow
 from app.normalization import normalize_row
-from app.onec_client import OneCClient
+from app.onec_client import OneCClient, normalize_warehouses
 from app.reconciliation import (
     DATA_MISMATCH,
     DUPLICATE_IN_TAX,
@@ -64,6 +64,15 @@ class RequestValidationTests(TestCase):
         self.assertEqual(payload.start_date, date(2024, 1, 1))
         self.assertEqual(payload.end_date, date(2024, 1, 31))
 
+    def test_normalizes_warehouses(self) -> None:
+        payload = ReconcileRequest(
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 1, 31),
+            warehouses=[" Основной  склад ", "", "Склад 2", "Основной склад"],
+        )
+
+        self.assertEqual(payload.warehouses, ["Основной склад", "Склад 2"])
+
     def test_rejects_end_date_before_start_date(self) -> None:
         with self.assertRaises(ValueError):
             ReconcileRequest(start_date=date(2024, 2, 1), end_date=date(2024, 1, 31))
@@ -93,7 +102,52 @@ class OneCClientTests(TestCase):
         mocked_get.assert_called_once()
         self.assertEqual(
             mocked_get.call_args.kwargs["params"],
-            {"start_date": "2024-01-01", "end_date": "2024-01-31"},
+            [("start_date", "2024-01-01"), ("end_date", "2024-01-31")],
+        )
+
+    @patch("app.onec_client.requests.get")
+    def test_sends_repeated_warehouse_params(self, mocked_get: Mock) -> None:
+        response = Mock()
+        response.json.return_value = []
+        response.raise_for_status.return_value = None
+        mocked_get.return_value = response
+
+        client = OneCClient(timeout_seconds=3)
+        client.fetch_rows(
+            OneCBaseConfig(name="Налоговая", url="https://example.test/export"),
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 1, 31),
+            warehouses=[" Основной  склад ", "Склад 2"],
+        )
+
+        self.assertEqual(
+            mocked_get.call_args.kwargs["params"],
+            [
+                ("start_date", "2024-01-01"),
+                ("end_date", "2024-01-31"),
+                ("warehouse", "Основной склад"),
+                ("warehouse", "Склад 2"),
+            ],
+        )
+
+    def test_normalizes_warehouse_string_list(self) -> None:
+        self.assertEqual(
+            normalize_warehouses([" Основной  склад ", "", "Склад 2", "Основной склад"]),
+            ["Основной склад", "Склад 2"],
+        )
+
+    def test_normalizes_warehouse_object_list(self) -> None:
+        self.assertEqual(
+            normalize_warehouses(
+                {
+                    "data": [
+                        {"name": "Основной склад"},
+                        {"Название": "Склад 2"},
+                        {"Склад": "Склад 3"},
+                    ]
+                }
+            ),
+            ["Основной склад", "Склад 2", "Склад 3"],
         )
 
 

@@ -3,7 +3,7 @@ from datetime import date
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, Response
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.config import ConfigurationError, load_settings
 from app.onec_client import OneCClient, OneCClientError
@@ -20,6 +20,19 @@ app = FastAPI(title="Сверка остатков 1С")
 class ReconcileRequest(BaseModel):
     start_date: date = Field(..., description="Начальная дата периода включительно")
     end_date: date = Field(..., description="Конечная дата периода включительно")
+    warehouses: list[str] = Field(default_factory=list, description="Список складов для фильтра сверки")
+
+    @field_validator("warehouses")
+    @classmethod
+    def normalize_warehouses(cls, value: list[str]) -> list[str]:
+        result: list[str] = []
+        seen: set[str] = set()
+        for item in value or []:
+            normalized = " ".join(str(item).strip().split())
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                result.append(normalized)
+        return result
 
     @model_validator(mode="after")
     def validate_date_range(self) -> "ReconcileRequest":
@@ -39,12 +52,27 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/warehouses")
+async def warehouses() -> dict[str, list[str]]:
+    try:
+        settings = load_settings()
+    except ConfigurationError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    client = OneCClient(timeout_seconds=settings.timeout_seconds)
+    try:
+        return {"warehouses": client.fetch_warehouses(settings.trade_base)}
+    except OneCClientError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
 @app.post("/reconcile")
 async def run_reconciliation(payload: ReconcileRequest) -> Response:
     logger.info(
-        "Reconciliation started: start_date=%s end_date=%s",
+        "Reconciliation started: start_date=%s end_date=%s warehouses=%s",
         payload.start_date,
         payload.end_date,
+        len(payload.warehouses),
     )
     try:
         settings = load_settings()
@@ -59,12 +87,14 @@ async def run_reconciliation(payload: ReconcileRequest) -> Response:
             settings.trade_base,
             start_date=payload.start_date,
             end_date=payload.end_date,
+            warehouses=payload.warehouses,
         )
         tax_exports = {
             tax_base.name: client.fetch_rows(
                 tax_base,
                 start_date=payload.start_date,
                 end_date=payload.end_date,
+                warehouses=payload.warehouses,
             )
             for tax_base in settings.tax_bases
         }

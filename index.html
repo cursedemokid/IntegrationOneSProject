@@ -12,7 +12,7 @@
             color: #1f2937;
         }
         main {
-            max-width: 680px;
+            max-width: 760px;
             margin: 48px auto;
             padding: 32px;
             background: #ffffff;
@@ -32,7 +32,7 @@
             gap: 6px;
             font-weight: 600;
         }
-        select, input, button {
+        input, button {
             font: inherit;
             padding: 10px 12px;
             border-radius: 8px;
@@ -45,13 +45,50 @@
             cursor: pointer;
             font-weight: 700;
         }
+        button.secondary {
+            background: #e2e8f0;
+            color: #1f2937;
+        }
         button:disabled {
             background: #94a3b8;
             cursor: wait;
         }
-        #status {
+        fieldset {
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 14px;
+        }
+        legend {
+            padding: 0 6px;
+            font-weight: 700;
+        }
+        .warehouse-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+        .warehouse-list {
+            display: grid;
+            gap: 8px;
+            max-height: 220px;
+            overflow: auto;
+        }
+        .warehouse-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 400;
+        }
+        .warehouse-item input {
+            width: auto;
+        }
+        .muted {
+            color: #64748b;
+        }
+        #status, #warehouse-status {
             min-height: 24px;
-            margin-top: 16px;
+            margin-top: 10px;
         }
         .error {
             color: #b91c1c;
@@ -64,7 +101,7 @@
 <body>
 <main>
     <h1>Сверка остатков 1С</h1>
-    <p>Укажите начальную и конечную дату периода включительно. Сервис получит актуальные данные из 1С и сформирует Excel-отчёт.</p>
+    <p>Укажите начальную и конечную дату периода включительно. При необходимости выберите один или несколько складов.</p>
 
     <form id="reconcile-form">
         <label>
@@ -75,6 +112,18 @@
             Конечная дата
             <input id="end-date" name="end_date" type="date" required>
         </label>
+
+        <fieldset>
+            <legend>Склады</legend>
+            <p class="muted">Если не выбрать склады, сверка будет выполнена по всем складам.</p>
+            <div class="warehouse-actions">
+                <button id="select-all-warehouses" class="secondary" type="button">Выбрать все</button>
+                <button id="clear-warehouses" class="secondary" type="button">Снять выбор</button>
+            </div>
+            <div id="warehouse-list" class="warehouse-list"></div>
+            <div id="warehouse-status" class="muted" role="status"></div>
+        </fieldset>
+
         <button id="submit" type="submit">Выполнить сверку</button>
     </form>
 
@@ -87,10 +136,25 @@
     const submitButton = document.getElementById("submit");
     const startDateInput = document.getElementById("start-date");
     const endDateInput = document.getElementById("end-date");
+    const warehouseList = document.getElementById("warehouse-list");
+    const warehouseStatus = document.getElementById("warehouse-status");
+    const selectAllWarehousesButton = document.getElementById("select-all-warehouses");
+    const clearWarehousesButton = document.getElementById("clear-warehouses");
+
     const today = new Date();
     const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     startDateInput.value = formatDate(firstDayOfMonth);
     endDateInput.value = formatDate(today);
+
+    loadWarehouses();
+
+    selectAllWarehousesButton.addEventListener("click", () => {
+        getWarehouseCheckboxes().forEach((checkbox) => checkbox.checked = true);
+    });
+
+    clearWarehousesButton.addEventListener("click", () => {
+        getWarehouseCheckboxes().forEach((checkbox) => checkbox.checked = false);
+    });
 
     form.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -115,7 +179,8 @@
                 headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({
                     start_date: startDateInput.value,
-                    end_date: endDateInput.value
+                    end_date: endDateInput.value,
+                    warehouses: getSelectedWarehouses()
                 })
             });
 
@@ -142,6 +207,64 @@
             submitButton.disabled = false;
         }
     });
+
+    async function loadWarehouses() {
+        warehouseStatus.className = "muted";
+        warehouseStatus.textContent = "Загрузка списка складов...";
+        try {
+            const response = await fetch("/warehouses");
+            if (!response.ok) {
+                throw new Error(await readErrorMessage(response));
+            }
+            const payload = await response.json();
+            const warehouses = Array.isArray(payload.warehouses) ? payload.warehouses : [];
+            renderWarehouses(warehouses);
+        } catch (error) {
+            warehouseList.innerHTML = "";
+            warehouseStatus.className = "error";
+            warehouseStatus.textContent = `Список складов не загружен: ${error.message}. Можно выполнить сверку без фильтра.`;
+        }
+    }
+
+    function renderWarehouses(warehouses) {
+        warehouseList.innerHTML = "";
+        if (!warehouses.length) {
+            warehouseStatus.className = "muted";
+            warehouseStatus.textContent = "Список складов пуст. Сверка будет выполнена по всем складам.";
+            return;
+        }
+
+        for (const warehouse of warehouses) {
+            const id = `warehouse-${Math.random().toString(36).slice(2)}`;
+            const label = document.createElement("label");
+            label.className = "warehouse-item";
+
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.value = warehouse;
+            checkbox.id = id;
+
+            const text = document.createElement("span");
+            text.textContent = warehouse;
+
+            label.appendChild(checkbox);
+            label.appendChild(text);
+            warehouseList.appendChild(label);
+        }
+
+        warehouseStatus.className = "success";
+        warehouseStatus.textContent = `Загружено складов: ${warehouses.length}.`;
+    }
+
+    function getWarehouseCheckboxes() {
+        return Array.from(warehouseList.querySelectorAll("input[type='checkbox']"));
+    }
+
+    function getSelectedWarehouses() {
+        return getWarehouseCheckboxes()
+            .filter((checkbox) => checkbox.checked)
+            .map((checkbox) => checkbox.value);
+    }
 
     async function readErrorMessage(response) {
         const contentType = response.headers.get("content-type") || "";

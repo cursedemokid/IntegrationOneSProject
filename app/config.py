@@ -16,6 +16,7 @@ class ConfigurationError(RuntimeError):
 class OneCBaseConfig:
     name: str
     url: str
+    warehouses_url: str | None = None
     username: str | None = None
     password: str | None = None
 
@@ -34,6 +35,7 @@ def load_settings(env_file: str = ".env") -> Settings:
     trade_base = OneCBaseConfig(
         name=values.get("ONEC_TRADE_NAME", "Управление торговлей"),
         url=_required(values, "ONEC_TRADE_URL"),
+        warehouses_url=values.get("ONEC_TRADE_WAREHOUSES_URL"),
         username=values.get("ONEC_TRADE_USERNAME"),
         password=values.get("ONEC_TRADE_PASSWORD"),
     )
@@ -89,6 +91,7 @@ def _parse_base_config(item: Any, index: int) -> OneCBaseConfig:
     return OneCBaseConfig(
         name=str(name),
         url=str(url),
+        warehouses_url=item.get("warehouses_url"),
         username=item.get("username"),
         password=item.get("password"),
     )
