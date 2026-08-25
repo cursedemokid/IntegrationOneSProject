@@ -19,6 +19,10 @@ class OneCBaseConfig:
     warehouses_url: str | None = None
     username: str | None = None
     password: str | None = None
+    request_method: str = "GET"
+    date_format: str = "iso"
+    period_begin_key: str = "start_date"
+    period_end_key: str = "end_date"
 
 
 @dataclass(frozen=True)
@@ -38,6 +42,10 @@ def load_settings(env_file: str = ".env") -> Settings:
         warehouses_url=values.get("ONEC_TRADE_WAREHOUSES_URL"),
         username=values.get("ONEC_TRADE_USERNAME"),
         password=values.get("ONEC_TRADE_PASSWORD"),
+        request_method=values.get("ONEC_TRADE_REQUEST_METHOD", "GET"),
+        date_format=values.get("ONEC_TRADE_DATE_FORMAT", "iso"),
+        period_begin_key=values.get("ONEC_TRADE_PERIOD_BEGIN_KEY", "start_date"),
+        period_end_key=values.get("ONEC_TRADE_PERIOD_END_KEY", "end_date"),
     )
 
     tax_bases_raw = _required(values, "ONEC_TAX_BASES_JSON")
@@ -94,4 +102,8 @@ def _parse_base_config(item: Any, index: int) -> OneCBaseConfig:
         warehouses_url=item.get("warehouses_url"),
         username=item.get("username"),
         password=item.get("password"),
+        request_method=str(item.get("request_method", "GET")),
+        date_format=str(item.get("date_format", "iso")),
+        period_begin_key=str(item.get("period_begin_key", "start_date")),
+        period_end_key=str(item.get("period_end_key", "end_date")),
     )

@@ -130,6 +130,36 @@ class OneCClientTests(TestCase):
             ],
         )
 
+    @patch("app.onec_client.requests.post")
+    def test_sends_postman_json_period_payload(self, mocked_post: Mock) -> None:
+        response = Mock()
+        response.json.return_value = []
+        response.raise_for_status.return_value = None
+        mocked_post.return_value = response
+
+        client = OneCClient(timeout_seconds=3)
+        client.fetch_rows(
+            OneCBaseConfig(
+                name="Trade",
+                url="https://example.test/stocksturnover",
+                username="user",
+                password="password",
+                request_method="POST",
+                date_format="%Y%m%d",
+                period_begin_key="periodBegin",
+                period_end_key="periodEnd",
+            ),
+            start_date=date(2026, 1, 24),
+            end_date=date(2026, 1, 31),
+        )
+
+        mocked_post.assert_called_once()
+        self.assertEqual(
+            mocked_post.call_args.kwargs["json"],
+            {"periodBegin": "20260124", "periodEnd": "20260131"},
+        )
+        self.assertEqual(mocked_post.call_args.kwargs["auth"], ("user", "password"))
+
     def test_normalizes_warehouse_string_list(self) -> None:
         self.assertEqual(
             normalize_warehouses([" Основной  склад ", "", "Склад 2", "Основной склад"]),

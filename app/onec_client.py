@@ -25,11 +25,12 @@ class OneCClient:
         warehouses: list[str] | None = None,
     ) -> list:
         try:
-            response = requests.get(
-                base.url,
-                params=_build_reconciliation_params(start_date, end_date, warehouses),
-                auth=(base.username, base.password) if base.username or base.password else None,
-                timeout=self.timeout_seconds,
+            response = _request_reconciliation_rows(
+                base=base,
+                start_date=start_date,
+                end_date=end_date,
+                warehouses=warehouses,
+                timeout_seconds=self.timeout_seconds,
             )
             response.raise_for_status()
             payload: Any = response.json()
@@ -105,19 +106,54 @@ def _extract_warehouse_name(record: Any) -> str:
 
 
 def _build_reconciliation_params(
+    base: OneCBaseConfig,
     start_date: date,
     end_date: date,
     warehouses: list[str] | None = None,
 ) -> list[tuple[str, str]]:
     params = [
-        ("start_date", start_date.isoformat()),
-        ("end_date", end_date.isoformat()),
+        (base.period_begin_key, _format_request_date(start_date, base.date_format)),
+        (base.period_end_key, _format_request_date(end_date, base.date_format)),
     ]
     for warehouse in warehouses or []:
         normalized = " ".join(str(warehouse).strip().split())
         if normalized:
             params.append(("warehouse", normalized))
     return params
+
+
+def _request_reconciliation_rows(
+    base: OneCBaseConfig,
+    start_date: date,
+    end_date: date,
+    warehouses: list[str] | None,
+    timeout_seconds: float,
+) -> requests.Response:
+    auth = (base.username, base.password) if base.username or base.password else None
+    params = _build_reconciliation_params(base, start_date, end_date, warehouses)
+    method = base.request_method.strip().upper()
+
+    if method == "POST":
+        return requests.post(
+            base.url,
+            json=dict(params),
+            auth=auth,
+            timeout=timeout_seconds,
+        )
+    if method == "GET":
+        return requests.get(
+            base.url,
+            params=params,
+            auth=auth,
+            timeout=timeout_seconds,
+        )
+    raise OneCClientError(f"Unsupported request method for base {base.name}: {base.request_method}")
+
+
+def _format_request_date(value: date, date_format: str) -> str:
+    if date_format == "iso":
+        return value.isoformat()
+    return value.strftime(date_format)
 
 
 def _format_period(start_date: date, end_date: date) -> str:
