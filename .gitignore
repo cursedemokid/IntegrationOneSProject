@@ -189,4 +189,34 @@ fabric.properties
 /.idea/modules.xml
 /.idea/inspectionProfiles/profiles_settings.xml
 /.idea/vcs.xml
+
+### Project-local generated files
+# Local secrets and environment overrides
+.env
+.env.*
+*.secret
+*.secrets
+secrets.*
+credentials.*
+
+# IDE module files
+.idea/*.iml
+*.iml
+
+# Generated Office/report artifacts
+*.docx
+*.xlsx
+*.xls
+*.csv
+*.tsv
+outputs/
+doc_work/
+docx_work/
+spreadsheet_work/
+meeting_artifacts/
+
+# Local helper/generated files
+README.md
+tools/
+vlc-help.txt
 /ТЗ_сверка_остатков_1С.docx
