@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from datetime import date
 from typing import Any
 
@@ -51,7 +52,7 @@ class OneCClient:
         try:
             response = requests.get(
                 base.warehouses_url,
-                auth=(base.username, base.password) if base.username or base.password else None,
+                headers=_build_auth_headers(base),
                 timeout=self.timeout_seconds,
             )
             response.raise_for_status()
@@ -129,7 +130,7 @@ def _request_reconciliation_rows(
     warehouses: list[str] | None,
     timeout_seconds: float,
 ) -> requests.Response:
-    auth = (base.username, base.password) if base.username or base.password else None
+    headers = _build_auth_headers(base)
     params = _build_reconciliation_params(base, start_date, end_date, warehouses)
     method = base.request_method.strip().upper()
 
@@ -137,17 +138,26 @@ def _request_reconciliation_rows(
         return requests.post(
             base.url,
             json=dict(params),
-            auth=auth,
+            headers=headers,
             timeout=timeout_seconds,
         )
     if method == "GET":
         return requests.get(
             base.url,
             params=params,
-            auth=auth,
+            headers=headers,
             timeout=timeout_seconds,
         )
     raise OneCClientError(f"Unsupported request method for base {base.name}: {base.request_method}")
+
+
+def _build_auth_headers(base: OneCBaseConfig) -> dict[str, str] | None:
+    if not base.username and not base.password:
+        return None
+    username = base.username or ""
+    password = base.password or ""
+    token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+    return {"Authorization": f"Basic {token}"}
 
 
 def _format_request_date(value: date, date_format: str) -> str:

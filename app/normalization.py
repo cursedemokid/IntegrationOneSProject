@@ -13,11 +13,13 @@ class NormalizationError(ValueError):
 FIELD_ALIASES = {
     "period": ("period", "Период", "период"),
     "document": ("document", "Документ", "документ"),
-    "debit_analytics": ("debit_analytics", "Аналитика Дт", "аналитика дт", "Analytic Dt"),
-    "credit_analytics": ("credit_analytics", "Аналитика Кт", "аналитика кт", "Analytic Kt"),
-    "debit": ("debit", "Дебет", "дебет"),
-    "credit": ("credit", "Кредит", "кредит"),
-    "balance": ("balance", "Текущее сальдо", "текущее сальдо"),
+    "nomenclature": ("nomenclature", "Номенклатура", "номенклатура"),
+    "opening_quantity": ("opening_quantity", "КоличествоНачальныйОстаток", "Количество начальный остаток"),
+    "opening_amount": ("opening_amount", "СтоимостьНачальныйОстаток", "Стоимость начальный остаток"),
+    "turnover_quantity": ("turnover_quantity", "КоличествоОборот", "Количество оборот"),
+    "turnover_amount": ("turnover_amount", "СтоимостьОборот", "Стоимость оборот"),
+    "closing_quantity": ("closing_quantity", "КоличествоКонечныйОстаток", "Количество конечный остаток"),
+    "closing_amount": ("closing_amount", "СтоимостьКонечныйОстаток", "Стоимость конечный остаток"),
 }
 
 
@@ -31,21 +33,22 @@ def normalize_row(record: dict[str, Any], default_period: str) -> LedgerRow:
         raise NormalizationError("Строка выгрузки должна быть объектом")
 
     period = _normalize_text(_get_value(record, "period") or default_period)
-    document = _normalize_text(_required_value(record, "document"))
-    debit_analytics = _normalize_text(_required_value(record, "debit_analytics"))
-    credit_analytics = _normalize_text(_required_value(record, "credit_analytics"))
+    document = _normalize_text(_get_value(record, "document") or "")
+    nomenclature = _normalize_text(_get_value(record, "nomenclature") or "")
 
-    if not period or not document or not debit_analytics or not credit_analytics:
-        raise NormalizationError("Период, документ и аналитики не должны быть пустыми")
+    if not period:
+        raise NormalizationError("Период не должен быть пустым")
 
     return LedgerRow(
         period=period,
         document=document,
-        debit_analytics=debit_analytics,
-        credit_analytics=credit_analytics,
-        debit=_normalize_amount(_required_value(record, "debit")),
-        credit=_normalize_amount(_required_value(record, "credit")),
-        balance=_normalize_amount(_required_value(record, "balance")),
+        nomenclature=nomenclature,
+        opening_quantity=_normalize_amount(_required_value(record, "opening_quantity")),
+        opening_amount=_normalize_amount(_required_value(record, "opening_amount")),
+        turnover_quantity=_normalize_amount(_required_value(record, "turnover_quantity")),
+        turnover_amount=_normalize_amount(_required_value(record, "turnover_amount")),
+        closing_quantity=_normalize_amount(_required_value(record, "closing_quantity")),
+        closing_amount=_normalize_amount(_required_value(record, "closing_amount")),
     )
 
 
@@ -88,9 +91,16 @@ def _normalize_amount(value: Any) -> Decimal:
     if isinstance(value, Decimal):
         amount = value
     else:
-        prepared = str(value).strip().replace(" ", "").replace("\u00a0", "").replace(",", ".")
+        prepared = (
+            str(value)
+            .strip()
+            .replace(" ", "")
+            .replace("\u00a0", "")
+            .replace("\u202f", "")
+            .replace(",", ".")
+        )
         try:
             amount = Decimal(prepared)
         except InvalidOperation as exc:
-            raise NormalizationError(f"Некорректный формат суммы: {value}") from exc
+            raise NormalizationError(f"Некорректный формат числа: {value}") from exc
     return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)

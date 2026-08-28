@@ -8,19 +8,20 @@ from decimal import Decimal
 class LedgerRow:
     period: str
     document: str
-    debit_analytics: str
-    credit_analytics: str
-    debit: Decimal
-    credit: Decimal
-    balance: Decimal
+    nomenclature: str
+    opening_quantity: Decimal
+    opening_amount: Decimal
+    turnover_quantity: Decimal
+    turnover_amount: Decimal
+    closing_quantity: Decimal
+    closing_amount: Decimal
 
     @property
-    def match_key(self) -> tuple[str, str, str, str]:
+    def match_key(self) -> tuple[str, str, str]:
         return (
             self.period,
             self.document,
-            self.debit_analytics,
-            self.credit_analytics,
+            self.nomenclature,
         )
 
 
@@ -29,11 +30,13 @@ class Discrepancy:
     period: str
     base: str
     document: str
-    debit_analytics: str
-    credit_analytics: str
-    debit: Decimal
-    credit: Decimal
-    balance: Decimal
+    nomenclature: str
+    opening_quantity: Decimal
+    opening_amount: Decimal
+    turnover_quantity: Decimal
+    turnover_amount: Decimal
+    closing_quantity: Decimal
+    closing_amount: Decimal
     discrepancy_type: str
     recommendation: str
 
